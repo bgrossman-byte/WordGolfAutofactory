@@ -81,6 +81,35 @@ body {
   letter-spacing: 0.18em;
 }
 
+.mode-toggle {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.mode-toggle button {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.mode-toggle button.active {
+  color: var(--text);
+  border-color: var(--target);
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.speedrun-result {
+  margin: 0 0 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
 .scoreboard {
   display: flex;
   justify-content: center;
@@ -97,6 +126,7 @@ body {
 .stat-value {
   font-size: 1.3rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-label {

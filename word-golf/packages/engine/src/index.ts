@@ -20,6 +20,7 @@ export { buildWordGraph, neighbors, isValidWord } from "./graph.js";
 export { bfsPar } from "./par.js";
 export { validateMove, letterDiff } from "./move.js";
 export { relativeToPar, scoreLabel } from "./score.js";
+export { formatElapsed, isNewBest, speedrunKey } from "./speedrun.js";
 export {
   makeDailyPuzzle,
   makeRandomPuzzle,

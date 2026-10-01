@@ -5,6 +5,9 @@ import {
   type FormEvent,
 } from "react";
 import {
+  formatElapsed,
+  isNewBest,
+  speedrunKey,
   makeDailyPuzzle,
   makePracticePuzzle,
   neighbors,
@@ -108,6 +111,51 @@ export function App() {
   const lastMoveRef = useRef(Date.now());
   const completedRef = useRef(false);
 
+  // Speedrun mode: the clock starts on the first valid move and stops on solve.
+  // Best times are kept per start→target pair in localStorage.
+  const [speedrun, setSpeedrun] = useState(false);
+  const [runStartedAt, setRunStartedAt] = useState<number | null>(null);
+  const [runFinishedMs, setRunFinishedMs] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [bestMs, setBestMs] = useState<number | null>(null);
+  const [newBest, setNewBest] = useState(false);
+
+  useEffect(() => {
+    setBestMs(readBest(puzzle.start, puzzle.target));
+  }, [puzzle.start, puzzle.target]);
+
+  useEffect(() => {
+    if (!speedrun || runStartedAt === null || runFinishedMs !== null) return;
+    const id = window.setInterval(() => setNow(Date.now()), 100);
+    return () => window.clearInterval(id);
+  }, [speedrun, runStartedAt, runFinishedMs]);
+
+  useEffect(() => {
+    if (!speedrun || !won || runStartedAt === null || runFinishedMs !== null) return;
+    const elapsed = Date.now() - runStartedAt;
+    setRunFinishedMs(elapsed);
+    const previous = readBest(puzzle.start, puzzle.target);
+    if (isNewBest(elapsed, previous)) {
+      writeBest(puzzle.start, puzzle.target, elapsed);
+      setBestMs(elapsed);
+      setNewBest(true);
+    }
+  }, [speedrun, won, runStartedAt, runFinishedMs, puzzle.start, puzzle.target]);
+
+  const elapsedMs =
+    runFinishedMs ?? (runStartedAt === null ? 0 : now - runStartedAt);
+
+  function resetRun() {
+    setRunStartedAt(null);
+    setRunFinishedMs(null);
+    setNewBest(false);
+  }
+
+  function toggleSpeedrun() {
+    setSpeedrun((on) => !on);
+    reset();
+  }
+
   // Business + latency: fire once when the puzzle is solved.
   useEffect(() => {
     if (!won || completedRef.current) return;
@@ -153,6 +201,10 @@ export function App() {
     const now = Date.now();
     track(METRIC_EVENTS.moveLatencyMs, { value: now - lastMoveRef.current });
     lastMoveRef.current = now;
+    if (speedrun && runStartedAt === null) {
+      setRunStartedAt(now);
+      setNow(now);
+    }
     const nextPath = [...path, result.word];
     setPath(nextPath);
     setInput("");
@@ -193,6 +245,7 @@ export function App() {
     startTimeRef.current = Date.now();
     lastMoveRef.current = Date.now();
     completedRef.current = false;
+    resetRun();
   }
 
   // Swap in a fresh puzzle and reset all per-puzzle state (board + metric guards).
@@ -206,6 +259,7 @@ export function App() {
     startTimeRef.current = Date.now();
     lastMoveRef.current = Date.now();
     completedRef.current = false;
+    resetRun();
   }
 
   function newRandomPuzzle(difficulty: PracticeDifficulty) {
@@ -323,8 +377,20 @@ export function App() {
         <WordChip label="Target" word={puzzle.target} tone="target" />
       </section>
 
+      <div className="mode-toggle">
+        <button
+          type="button"
+          className={speedrun ? "active" : ""}
+          aria-pressed={speedrun}
+          onClick={toggleSpeedrun}
+        >
+          ⏱ Speedrun {speedrun ? "on" : "off"}
+        </button>
+      </div>
+
       <section className="scoreboard">
         <Stat label="Moves" value={String(moves)} />
+        {speedrun && <Stat label="Time" value={formatElapsed(elapsedMs)} />}
         <Stat label="Par" value={puzzle.par === null ? "\u2014" : String(puzzle.par)} />
         <Stat
           label={enableRandomPuzzle && !isDaily ? "Practice" : "Daily"}
@@ -361,6 +427,12 @@ export function App() {
               ? `${scoreLabel(moves, puzzle.par)} — solved in ${moves} (par ${puzzle.par})`
               : `Solved in ${moves}`}
           </h2>
+          {speedrun && runFinishedMs !== null && (
+            <p className="speedrun-result">
+              {newBest ? "New best! " : ""}Time {formatElapsed(runFinishedMs)}
+              {bestMs !== null && !newBest && ` · Best ${formatElapsed(bestMs)}`}
+            </p>
+          )}
           <div className="win-actions">
             {isDaily && enableShareResultButton && (
               <button type="button" onClick={shareResult}>
@@ -482,6 +554,25 @@ export function App() {
       )}
     </main>
   );
+}
+
+/** Best speedrun time (ms) for a puzzle, or null if none / storage unavailable. */
+function readBest(start: string, target: string): number | null {
+  try {
+    const raw = window.localStorage.getItem(speedrunKey(start, target));
+    const value = raw === null ? NaN : Number(raw);
+    return Number.isFinite(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeBest(start: string, target: string, ms: number): void {
+  try {
+    window.localStorage.setItem(speedrunKey(start, target), String(ms));
+  } catch {
+    // storage may be unavailable (private mode) — best times are best-effort
+  }
 }
 
 /** Days since launch epoch → spoiler-free daily puzzle number for share text. */
